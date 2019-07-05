@@ -6,39 +6,77 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script crossorigin src="https://unpkg.com/react@16/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@16/umd/react-dom.development.js"></script>
-    <script src="tableau-ui.min.js"></script>
     <script src="tableau-extensions-1.latest.js"></script>
     <style>
         html,
         body {
-            margin: 0;
-            padding: 0;
-            height: 100%;
-            width: 100%;
+          margin: 0;
+          padding: 0;
         }
-
-        #refresh {
-            height: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
+        body {
+          padding: 4px;
+        }
+        .button {
+          vertical-align: middle;
+          display: inline-block;
+          padding: .75rem 1.25rem;
+          border-radius: 10rem;
+          color: #fff;
+          text-transform: uppercase;
+          font-size: 1rem;
+          letter-spacing: .15rem;
+          transition: all .3s;
+          position: relative;
+          overflow: hidden;
+          text-decoration: none;
+          z-index: 1;
+        }
+        .button:after {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-color: #0cf;
+          border-radius: 10rem;
+          z-index: -2;
+        }
+        .button:before {
+          content: '';
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          width: 0%;
+          height: 100%;
+          background-color: #008fb3;
+          transition: all .3s;
+          border-radius: 10rem;
+          z-index: -1;
+        }
+        .button:hover {
+          color: #fff;
+        }
+        .button:hover:before {
+          width: 100%;
         }
     </style>
 </head>
 
 <body>
-    <div id="refresh" onclick="refreshAllDataSources()"></div>
+    <span style="vertical-align:middle">Refreshing in <span id="remaining"></span> seconds.</span> <a href="#" class="button" onclick="refreshNow()">Refresh Now</a>
     <script>
-        tableau.extensions.initializeDialogAsync().then(() => {
-          ReactDOM.render(
-              React.createElement(TableauUI.Button, {
-                  kind: 'filledGreen'
-              }, 'Refresh All'),
-              document.getElementById('refresh')
-          );
-        })
+        var remaining = 3600;
+        
+        function countdown() {
+          if (remaining === 0)
+            return refreshNow();
+          remaining -= 1;
+          document.getElementById('remaining').innerHTML = remaining;
+        }
+
+        tableau.extensions.initializeDialogAsync();
+        var countdownInterval = setInterval(countdown, 1000);
 
         function refreshAllDataSources() {
             let dataSourceFetchPromises = [];
@@ -48,17 +86,24 @@
             dashboard.worksheets.forEach(function (worksheet) {
                 dataSourceFetchPromises.push(worksheet.getDataSourcesAsync());
             });
-
             Promise.all(dataSourceFetchPromises).then(function (fetchResults) {
                 fetchResults.forEach(function (dataSourcesForWorksheet) {
-                    dataSourcesForWorksheet.forEach(function (dataSource) {
-                        if (!dashboardDataSources[dataSource.id]) {
-                            dashboardDataSources[dataSource.id] = dataSource;
-                            dataSource.refreshAsync();
-                        }
+                    dataSourcesForWorksheet.map(function (dataSource) {
+                        dashboardDataSources[dataSource.id] = dataSource;
                     });
                 });
+                return Promise.all(Object.keys(dashboardDataSources).map(function(key) {
+                    return dashboardDataSources[key].refreshAsync();
+                })).finally(function() {
+                    remaining = 3600;
+                    countdownInterval = setInterval(countdown, 1000);
+                });
             });
+        }
+
+        function refreshNow() {
+          clearInterval(countdownInterval);
+          refreshAllDataSources();
         }
     </script>
 </body>
